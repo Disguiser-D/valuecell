@@ -492,6 +492,15 @@ class ModelFactory:
         "openai-compatible": OpenAICompatibleProvider,
     }
 
+    _provider_classes_by_type: Dict[str, type[ModelProvider]] = {
+        "openrouter": OpenRouterProvider,
+        "google": GoogleProvider,
+        "azure": AzureProvider,
+        "siliconflow": SiliconFlowProvider,
+        "openai": OpenAIProvider,
+        "openai-compatible": OpenAICompatibleProvider,
+    }
+
     def __init__(self, config_manager: Optional[ConfigManager] = None):
         """
         Initialize model factory
@@ -501,15 +510,23 @@ class ModelFactory:
         """
         self.config_manager = config_manager or get_config_manager()
 
-    def register_provider(self, name: str, provider_class: type[ModelProvider]):
+    def register_provider(
+        self,
+        name: str,
+        provider_class: type[ModelProvider],
+        provider_type: Optional[str] = None,
+    ):
         """
         Register a custom provider
 
         Args:
             name: Provider name
             provider_class: Provider class
+            provider_type: Optional provider type identifier used for auto-mapping.
         """
         self._providers[name] = provider_class
+        if provider_type:
+            self._provider_classes_by_type[provider_type] = provider_class
         logger.info(f"Registered custom provider: {name}")
 
     def create_model(
@@ -621,14 +638,25 @@ class ModelFactory:
         Returns:
             Model instance
         """
-        # Check if provider is registered
-        if provider not in self._providers:
-            raise ValueError(f"Unsupported provider: {provider}")
-
         # Get provider configuration
         provider_config = self.config_manager.get_provider_config(provider)
         if not provider_config:
             raise ValueError(f"Provider configuration not found: {provider}")
+
+        # Resolve provider class either by explicit name or provider type
+        provider_class = self._providers.get(provider)
+        if not provider_class and provider_config.provider_type:
+            provider_class = self._provider_classes_by_type.get(
+                provider_config.provider_type
+            )
+            if provider_class:
+                # Cache resolved class for future lookups
+                self._providers[provider] = provider_class
+
+        if not provider_class:
+            raise ValueError(
+                f"Unsupported provider type '{provider_config.provider_type}' for provider '{provider}'"
+            )
 
         # Validate provider
         is_valid, error_msg = self.config_manager.validate_provider(provider)
@@ -636,7 +664,6 @@ class ModelFactory:
             raise ValueError(f"Provider validation failed: {error_msg}")
 
         # Create provider instance
-        provider_class = self._providers[provider]
         provider_instance = provider_class(provider_config)
 
         # Create model

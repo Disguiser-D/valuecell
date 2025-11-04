@@ -23,6 +23,7 @@ class ProviderConfig:
     """Provider configuration with resolved values"""
 
     name: str
+    provider_type: str
     enabled: bool
     api_key: Optional[str]
     base_url: Optional[str]
@@ -242,6 +243,7 @@ class ConfigManager:
 
         return ProviderConfig(
             name=provider_name,
+            provider_type=provider_data.get("provider_type", provider_name),
             enabled=enabled,
             api_key=api_key,
             base_url=base_url,
