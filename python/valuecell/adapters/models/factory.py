@@ -691,7 +691,7 @@ class ModelFactory:
         if not provider_class:
             raise ValueError(
                 f"Unsupported provider type '{getattr(provider_config, 'provider_type', None)}' for provider '{provider}'"
-            )in
+            )
 
         # Create provider instance
         provider_instance = provider_class(provider_config)
