@@ -643,9 +643,44 @@ class ModelFactory:
         if not provider_config:
             raise ValueError(f"Provider configuration not found: {provider}")
 
-        # Resolve provider class either by explicit name or provider type
+        # Support per-call API key override via kwargs (from main)
+        override_api_key = kwargs.pop("api_key", None)
+        if override_api_key is not None:
+            # Create a copy of provider_config with overridden api_key
+            provider_config = ProviderConfig(
+                name=provider_config.name,
+                provider_type=getattr(provider_config, "provider_type", None),
+                enabled=provider_config.enabled,
+                api_key=override_api_key,
+                base_url=provider_config.base_url,
+                default_model=provider_config.default_model,
+                models=provider_config.models,
+                parameters=provider_config.parameters,
+                default_embedding_model=provider_config.default_embedding_model,
+                embedding_models=provider_config.embedding_models,
+                embedding_parameters=provider_config.embedding_parameters,
+                extra_config=provider_config.extra_config
+            )
+            # Inline validation with override applied
+            if not provider_config.enabled:
+                raise ValueError(f"Provider '{provider}' is disabled in config")
+            if provider != "ollama" and not provider_config.api_key:
+                raise ValueError(
+                    f"API key override missing/empty for provider '{provider}'."
+                )
+            if provider == "azure" and not provider_config.base_url:
+                raise ValueError(
+                    "Azure endpoint not configured. Please set AZURE_OPENAI_ENDPOINT"
+                )
+        else:
+            # Validate provider using default manager rules
+            is_valid, error_msg = self.config_manager.validate_provider(provider)
+            if not is_valid:
+                raise ValueError(f"Provider validation failed: {error_msg}")
+
+        # Resolve provider class either by explicit name or provider type (from dev)
         provider_class = self._providers.get(provider)
-        if not provider_class and provider_config.provider_type:
+        if not provider_class and getattr(provider_config, "provider_type", None):
             provider_class = self._provider_classes_by_type.get(
                 provider_config.provider_type
             )
@@ -655,13 +690,8 @@ class ModelFactory:
 
         if not provider_class:
             raise ValueError(
-                f"Unsupported provider type '{provider_config.provider_type}' for provider '{provider}'"
-            )
-
-        # Validate provider
-        is_valid, error_msg = self.config_manager.validate_provider(provider)
-        if not is_valid:
-            raise ValueError(f"Provider validation failed: {error_msg}")
+                f"Unsupported provider type '{getattr(provider_config, 'provider_type', None)}' for provider '{provider}'"
+            )in
 
         # Create provider instance
         provider_instance = provider_class(provider_config)
@@ -1031,10 +1061,37 @@ class ModelFactory:
                 f"Please configure embedding models in providers/{provider}.yaml"
             )
 
-        # Validate provider
-        is_valid, error_msg = self.config_manager.validate_provider(provider)
-        if not is_valid:
-            raise ValueError(f"Provider validation failed: {error_msg}")
+        # Support per-call API key override via kwargs
+        override_api_key = kwargs.pop("api_key", None)
+        if override_api_key is not None:
+            provider_config = ProviderConfig(
+                name=provider_config.name,
+                enabled=provider_config.enabled,
+                api_key=override_api_key,
+                base_url=provider_config.base_url,
+                default_model=provider_config.default_model,
+                models=provider_config.models,
+                parameters=provider_config.parameters,
+                default_embedding_model=provider_config.default_embedding_model,
+                embedding_models=provider_config.embedding_models,
+                embedding_parameters=provider_config.embedding_parameters,
+                extra_config=provider_config.extra_config,
+            )
+            if not provider_config.enabled:
+                raise ValueError(f"Provider '{provider}' is disabled in config")
+            if provider != "ollama" and not provider_config.api_key:
+                raise ValueError(
+                    f"API key override missing/empty for provider '{provider}'."
+                )
+            if provider == "azure" and not provider_config.base_url:
+                raise ValueError(
+                    "Azure endpoint not configured. Please set AZURE_OPENAI_ENDPOINT"
+                )
+        else:
+            # Validate provider using default manager rules
+            is_valid, error_msg = self.config_manager.validate_provider(provider)
+            if not is_valid:
+                raise ValueError(f"Provider validation failed: {error_msg}")
 
         # Create provider instance
         provider_class = self._providers[provider]
@@ -1171,3 +1228,4 @@ def create_embedder_for_agent(agent_name: str, **kwargs):
     """
     factory = get_model_factory()
     return factory.create_embedder_for_agent(agent_name, **kwargs)
+
